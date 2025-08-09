@@ -7,15 +7,28 @@ if [ -f /app/scripts/configure-railway.sh ]; then
 fi
 
 echo "Starting Docker daemon with IPv6 support..."
+
+# Ensure docker data directory exists
+if [ -d "/data" ]; then
+    mkdir -p /data/docker
+else
+    mkdir -p /var/lib/docker
+fi
+
 # Configure Docker daemon for Railway's container environment
 mkdir -p /etc/docker
+
+# Set Docker data root based on volume availability
+if [ -d "/data" ]; then
+    DOCKER_DATA_ROOT="/data/docker"
+else
+    DOCKER_DATA_ROOT="/var/lib/docker"
+fi
+
 cat > /etc/docker/daemon.json <<EOF
 {
-  "ipv6": true,
-  "fixed-cidr-v6": "fd00::/80",
-  "experimental": false,
   "storage-driver": "vfs",
-  "data-root": "/data/docker",
+  "data-root": "$DOCKER_DATA_ROOT",
   "exec-opts": ["native.cgroupdriver=cgroupfs"],
   "log-driver": "json-file",
   "log-opts": {
@@ -23,18 +36,14 @@ cat > /etc/docker/daemon.json <<EOF
     "max-file": "3"
   },
   "dns": ["8.8.8.8", "8.8.4.4"],
-  "dns-search": ["railway.internal"],
   "insecure-registries": ["127.0.0.0/8"],
   "live-restore": false,
   "userland-proxy": false
 }
 EOF
 
-# Ensure docker data directory exists
-mkdir -p /data/docker
-
-# Start Docker daemon in the background with appropriate flags
-dockerd --data-root=/data/docker &
+# Start Docker daemon in the background (config file handles all settings)
+dockerd &
 DOCKER_PID=$!
 
 # Wait for Docker to be ready

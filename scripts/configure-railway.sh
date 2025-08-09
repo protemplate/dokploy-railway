@@ -54,10 +54,14 @@ EOF
     # Set proper permissions
     chmod 600 /etc/dokploy/traefik/acme.json 2>/dev/null || touch /etc/dokploy/traefik/acme.json && chmod 600 /etc/dokploy/traefik/acme.json
     
-    # Configure network settings for IPv6
-    sysctl -w net.ipv6.conf.all.disable_ipv6=0
-    sysctl -w net.ipv6.conf.default.disable_ipv6=0
-    sysctl -w net.ipv6.conf.all.forwarding=1
+    # Configure network settings for IPv6 (if we have permission)
+    if [ -w /proc/sys/net/ipv6/conf/all/disable_ipv6 ]; then
+        sysctl -w net.ipv6.conf.all.disable_ipv6=0
+        sysctl -w net.ipv6.conf.default.disable_ipv6=0
+        sysctl -w net.ipv6.conf.all.forwarding=1
+    else
+        echo "Cannot modify sysctl settings (read-only filesystem) - skipping"
+    fi
     
     echo "Railway configuration completed"
 else
