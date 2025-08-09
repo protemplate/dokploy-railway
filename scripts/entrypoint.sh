@@ -7,19 +7,34 @@ if [ -f /app/scripts/configure-railway.sh ]; then
 fi
 
 echo "Starting Docker daemon with IPv6 support..."
-# Configure Docker daemon for Railway's IPv6 networking
+# Configure Docker daemon for Railway's container environment
 mkdir -p /etc/docker
 cat > /etc/docker/daemon.json <<EOF
 {
   "ipv6": true,
   "fixed-cidr-v6": "fd00::/80",
-  "experimental": true,
-  "ip6tables": true
+  "experimental": false,
+  "storage-driver": "vfs",
+  "data-root": "/data/docker",
+  "exec-opts": ["native.cgroupdriver=cgroupfs"],
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "3"
+  },
+  "dns": ["8.8.8.8", "8.8.4.4"],
+  "dns-search": ["railway.internal"],
+  "insecure-registries": ["127.0.0.0/8"],
+  "live-restore": false,
+  "userland-proxy": false
 }
 EOF
 
-# Start Docker daemon in the background
-dockerd &
+# Ensure docker data directory exists
+mkdir -p /data/docker
+
+# Start Docker daemon in the background with appropriate flags
+dockerd --data-root=/data/docker &
 DOCKER_PID=$!
 
 # Wait for Docker to be ready
@@ -44,12 +59,14 @@ if [ -d "/data" ]; then
         ln -sf /data/dokploy /etc/dokploy
     fi
     
-    if [ ! -L /var/lib/docker ]; then
-        rm -rf /var/lib/docker
-        ln -sf /data/docker /var/lib/docker
-    fi
+    # Note: Docker data-root is set via daemon.json instead of symlink
+    # to avoid mount propagation issues
     
     echo "Persistent storage configured"
+else
+    echo "No /data volume detected, using local storage (data will not persist)"
+    mkdir -p /etc/dokploy
+    mkdir -p /var/lib/docker
 fi
 
 # Check if Dokploy is already installed

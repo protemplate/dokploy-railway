@@ -7,26 +7,8 @@ echo "Configuring Dokploy for Railway environment..."
 if [ -n "$RAILWAY_ENVIRONMENT" ]; then
     echo "Railway environment detected: $RAILWAY_ENVIRONMENT"
     
-    # Configure Docker for IPv6
-    if [ ! -f /etc/docker/daemon.json ]; then
-        mkdir -p /etc/docker
-        cat > /etc/docker/daemon.json <<EOF
-{
-  "ipv6": true,
-  "fixed-cidr-v6": "fd00::/80",
-  "experimental": true,
-  "ip6tables": true,
-  "dns": ["[2001:4860:4860::8888]", "[2001:4860:4860::8844]", "8.8.8.8", "8.8.4.4"],
-  "storage-driver": "overlay2",
-  "log-driver": "json-file",
-  "log-opts": {
-    "max-size": "10m",
-    "max-file": "3"
-  }
-}
-EOF
-        echo "Docker daemon configured for IPv6"
-    fi
+    # Docker configuration is now handled in entrypoint.sh
+    echo "Docker will be configured for Railway environment"
     
     # Configure Traefik for dual-stack
     mkdir -p /etc/dokploy/traefik/dynamic
