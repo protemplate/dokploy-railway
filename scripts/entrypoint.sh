@@ -43,15 +43,30 @@ cat > /etc/docker/daemon.json <<EOF
 EOF
 
 # Start Docker daemon in the background (config file handles all settings)
-dockerd &
+echo "Starting Docker daemon..."
+dockerd 2>&1 | tee /tmp/docker.log &
 DOCKER_PID=$!
 
 # Wait for Docker to be ready
 echo "Waiting for Docker daemon to be ready..."
-while ! docker info >/dev/null 2>&1; do
-    sleep 1
+MAX_DOCKER_WAIT=60
+DOCKER_WAITED=0
+while [ $DOCKER_WAITED -lt $MAX_DOCKER_WAIT ]; do
+    if docker info >/dev/null 2>&1; then
+        echo "Docker daemon is ready!"
+        break
+    fi
+    sleep 2
+    DOCKER_WAITED=$((DOCKER_WAITED + 2))
+    echo "Waiting for Docker... ($DOCKER_WAITED seconds)"
 done
-echo "Docker daemon is ready!"
+
+if [ $DOCKER_WAITED -ge $MAX_DOCKER_WAIT ]; then
+    echo "ERROR: Docker daemon failed to start within $MAX_DOCKER_WAIT seconds"
+    echo "Docker logs:"
+    cat /tmp/docker.log
+    exit 1
+fi
 
 # Setup persistent storage (Railway mounts volume at /data)
 if [ -d "/data" ]; then

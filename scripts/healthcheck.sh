@@ -10,9 +10,19 @@ if [ -f /tmp/dokploy-installing ]; then
     exit 0
 fi
 
-# Check if Docker daemon is running
+# Check if Docker daemon is running (but don't fail immediately)
 if ! docker info >/dev/null 2>&1; then
     echo "Docker daemon is not running yet"
+    # During startup, this is expected
+    if [ -f /tmp/dokploy-installing ]; then
+        exit 0
+    fi
+    # Check if we're within the first 2 minutes of startup
+    UPTIME=$(awk '{print int($1)}' /proc/uptime 2>/dev/null || echo "120")
+    if [ "$UPTIME" -lt 120 ]; then
+        echo "Container is still starting up..."
+        exit 0
+    fi
     exit 1
 fi
 
