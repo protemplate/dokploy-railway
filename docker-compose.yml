@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  dokploy:
+    build: .
+    ports:
+      - "${PORT:-3000}:3000"
+    volumes:
+      - dokploy_data:/var/lib/dokploy
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - DOKPLOY_PORT=${PORT:-3000}
+      - RAILWAY_ENVIRONMENT=${RAILWAY_ENVIRONMENT:-production}
+    restart: unless-stopped
+    privileged: true
+
+volumes:
+  dokploy_data:
+    driver: local
