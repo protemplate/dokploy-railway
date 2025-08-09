@@ -1,0 +1,23 @@
+[build]
+builder = "dockerfile"
+dockerfilePath = "./Dockerfile"
+
+[deploy]
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
+
+[[services]]
+name = "dokploy"
+port = 3000
+
+[services.healthcheck]
+path = "/"
+timeout = 120
+
+[[services.volumes]]
+mount = "/etc/dokploy"
+name = "dokploy-config"
+
+[[services.volumes]]
+mount = "/var/lib/docker"
+name = "docker-data"

@@ -2,8 +2,10 @@ FROM ubuntu:24.04
 
 # Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive
+ENV PORT=3000
 ENV DOKPLOY_PORT=3000
-ENV ADVERTISE_ADDR=172.17.0.2
+ENV ADVERTISE_ADDR=[::]
+ENV DOCKER_HOST=unix:///var/run/docker.sock
 
 # Install required packages
 RUN apt-get update && apt-get install -y \
@@ -15,6 +17,9 @@ RUN apt-get update && apt-get install -y \
     supervisor \
     iproute2 \
     net-tools \
+    iputils-ping \
+    dnsutils \
+    iptables \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Docker
@@ -32,15 +37,15 @@ COPY .railway/ /app/.railway/
 # Make scripts executable
 RUN chmod +x /app/scripts/*.sh /app/.railway/*.sh
 
-# Install Dokploy
-RUN /app/scripts/install-dokploy.sh
+# Expose ports
+EXPOSE 3000 80 443
 
-# Expose port
-EXPOSE 3000
+# Create volume for persistent data
+VOLUME ["/etc/dokploy", "/var/lib/docker"]
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=5 \
     CMD /app/scripts/healthcheck.sh
 
-# Start command
-CMD ["/app/.railway/deploy.sh"]
+# Use entrypoint script
+ENTRYPOINT ["/app/scripts/entrypoint.sh"]
