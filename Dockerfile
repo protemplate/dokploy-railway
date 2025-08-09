@@ -41,8 +41,8 @@ RUN chmod +x /app/scripts/*.sh /app/.railway/*.sh
 # Expose ports
 EXPOSE 3000 80 443
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=5 \
+# Health check with extended timeouts for initial installation
+HEALTHCHECK --interval=30s --timeout=30s --start-period=300s --retries=10 \
     CMD /app/scripts/healthcheck.sh
 
 # Use entrypoint script

@@ -4,9 +4,9 @@ dockerfilePath = "./Dockerfile"
 
 [deploy]
 restartPolicyType = "ON_FAILURE"
-restartPolicyMaxRetries = 3
+restartPolicyMaxRetries = 5
 healthcheckPath = "/"
-healthcheckTimeout = 120
+healthcheckTimeout = 300
 
 # Note: Railway only allows one volume per service
 # The volume will be automatically mounted at /data

@@ -55,6 +55,7 @@ fi
 # Check if Dokploy is already installed
 if [ ! -f /data/dokploy/.installed ]; then
     echo "First time setup - Installing Dokploy..."
+    touch /tmp/dokploy-installing
     
     # Set advertise address for Railway
     if [ -n "$RAILWAY_PRIVATE_DOMAIN" ]; then
@@ -81,6 +82,7 @@ if [ ! -f /data/dokploy/.installed ]; then
     # Mark as installed
     mkdir -p /data/dokploy
     touch /data/dokploy/.installed
+    rm -f /tmp/dokploy-installing
     
     echo "Dokploy installation completed!"
 else
@@ -107,10 +109,22 @@ fi
 
 # Wait for Dokploy to be ready
 echo "Waiting for Dokploy to be ready on port ${PORT:-3000}..."
-while ! curl -s http://[::1]:${PORT:-3000} >/dev/null 2>&1 && ! curl -s http://localhost:${PORT:-3000} >/dev/null 2>&1; do
-    sleep 2
+MAX_WAIT=300  # 5 minutes
+WAITED=0
+while [ $WAITED -lt $MAX_WAIT ]; do
+    if curl -s http://[::1]:${PORT:-3000} >/dev/null 2>&1 || curl -s http://localhost:${PORT:-3000} >/dev/null 2>&1 || curl -s http://127.0.0.1:${PORT:-3000} >/dev/null 2>&1; then
+        echo "Dokploy is ready!"
+        break
+    fi
+    sleep 5
+    WAITED=$((WAITED + 5))
+    echo "Still waiting for Dokploy... ($WAITED seconds)"
 done
-echo "Dokploy is ready!"
+
+if [ $WAITED -ge $MAX_WAIT ]; then
+    echo "Warning: Dokploy did not become ready within $MAX_WAIT seconds"
+    echo "Container will continue running, Dokploy may still be initializing..."
+fi
 
 # Display access information
 if [ -n "$RAILWAY_PUBLIC_DOMAIN" ]; then
