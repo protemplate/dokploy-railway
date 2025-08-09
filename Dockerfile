@@ -6,6 +6,7 @@ ENV PORT=3000
 ENV DOKPLOY_PORT=3000
 ENV ADVERTISE_ADDR=[::]
 ENV DOCKER_HOST=unix:///var/run/docker.sock
+ENV RAILWAY_RUN_UID=0
 
 # Install required packages
 RUN apt-get update && apt-get install -y \
@@ -39,9 +40,6 @@ RUN chmod +x /app/scripts/*.sh /app/.railway/*.sh
 
 # Expose ports
 EXPOSE 3000 80 443
-
-# Create volume for persistent data
-VOLUME ["/etc/dokploy", "/var/lib/docker"]
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=5 \

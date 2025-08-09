@@ -29,8 +29,31 @@ while ! docker info >/dev/null 2>&1; do
 done
 echo "Docker daemon is ready!"
 
+# Setup persistent storage (Railway mounts volume at /data)
+if [ -d "/data" ]; then
+    echo "Setting up persistent storage..."
+    
+    # Create necessary directories in the volume
+    mkdir -p /data/dokploy
+    mkdir -p /data/docker
+    mkdir -p /data/traefik
+    
+    # Create symlinks for persistent data
+    if [ ! -L /etc/dokploy ]; then
+        rm -rf /etc/dokploy
+        ln -sf /data/dokploy /etc/dokploy
+    fi
+    
+    if [ ! -L /var/lib/docker ]; then
+        rm -rf /var/lib/docker
+        ln -sf /data/docker /var/lib/docker
+    fi
+    
+    echo "Persistent storage configured"
+fi
+
 # Check if Dokploy is already installed
-if [ ! -f /etc/dokploy/.installed ]; then
+if [ ! -f /data/dokploy/.installed ]; then
     echo "First time setup - Installing Dokploy..."
     
     # Set advertise address for Railway
@@ -56,8 +79,8 @@ if [ ! -f /etc/dokploy/.installed ]; then
     /app/scripts/install-dokploy.sh
     
     # Mark as installed
-    mkdir -p /etc/dokploy
-    touch /etc/dokploy/.installed
+    mkdir -p /data/dokploy
+    touch /data/dokploy/.installed
     
     echo "Dokploy installation completed!"
 else

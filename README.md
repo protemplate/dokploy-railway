@@ -25,9 +25,12 @@ Dokploy is an open-source, self-hosted platform for managing deployments of web 
 
 1. Click the "Deploy on Railway" button
 2. Configure environment variables if needed
-3. Wait for deployment to complete (first deployment may take 3-5 minutes as Dokploy installs)
-4. Access Dokploy at your Railway-generated URL on port 3000
-5. Complete the initial setup
+3. Add a persistent volume in Railway dashboard:
+   - Create a volume and mount it to `/data`
+   - This single volume will store all Dokploy and Docker data
+4. Wait for deployment to complete (first deployment may take 3-5 minutes as Dokploy installs)
+5. Access Dokploy at your Railway-generated URL on port 3000
+6. Complete the initial setup
 
 **Note:** Dokploy is installed at runtime on first launch to ensure Docker Swarm can properly initialize. Subsequent restarts will be faster.
 
@@ -57,6 +60,22 @@ This template is optimized for Railway with:
 - **Persistent Storage**: Volumes for Docker and Dokploy configuration
 - **Health Checks**: Automatic health monitoring
 - **Auto-restart**: Configured restart policies
+
+## Volume Configuration
+
+Railway allows only one volume per service. After deployment, configure the volume in Railway dashboard:
+
+### Required Volume:
+- **Mount path:** `/data`
+- **Purpose:** Stores all persistent data including:
+  - Dokploy configuration and settings
+  - Docker images, containers, and volumes
+  - Traefik configuration and SSL certificates
+  - Application deployments and databases
+
+The entrypoint script automatically creates symlinks from standard locations to the `/data` volume.
+
+**Important:** Without this volume, your data will be lost on redeploy!
 
 ## Networking on Railway
 
