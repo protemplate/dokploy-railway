@@ -3,6 +3,7 @@ FROM ubuntu:24.04
 # Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DOKPLOY_PORT=3000
+ENV ADVERTISE_ADDR=172.17.0.2
 
 # Install required packages
 RUN apt-get update && apt-get install -y \
@@ -12,6 +13,8 @@ RUN apt-get update && apt-get install -y \
     gnupg \
     lsb-release \
     supervisor \
+    iproute2 \
+    net-tools \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Docker
