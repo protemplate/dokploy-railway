@@ -48,8 +48,8 @@ mkdir -p "${DOCKER_DATA_ROOT}"
 echo "Starting Docker daemon for Railway environment..."
 echo "Note: Some warnings are expected in container environment"
 
-# Method 1: Try starting Docker with minimal networking
-echo "Attempting to start Docker with disabled networking features..."
+# Start Docker with disabled networking features for Railway
+echo "Starting Docker with Railway-optimized configuration..."
 dockerd \
     --iptables=false \
     --ipv6=false \
@@ -61,41 +61,9 @@ dockerd \
     --exec-opt="native.cgroupdriver=cgroupfs" \
     --cgroup-parent="/docker" \
     --raw-logs \
-    --log-level=warn \
-    2>&1 | tee /tmp/docker.log &
+    2>&1 | tee /tmp/docker.log | grep -v "ip6tables\|iptables\|daemon root propagation\|configuring DOCKER" &
 DOCKER_PID=$!
 
-# Give it a moment to fail or succeed
-sleep 5
-
-# Check if Docker started
-if ! kill -0 $DOCKER_PID 2>/dev/null; then
-    echo "Standard Docker failed, trying with host network only..."
-    
-    # Method 2: Try with host network driver only
-    dockerd \
-        --iptables=false \
-        --ipv6=false \
-        --ip-forward=false \
-        --ip-masq=false \
-        --host=unix:///var/run/docker.sock \
-        --data-root="${DOCKER_DATA_ROOT}" \
-        --storage-driver=vfs \
-        --default-network-opt="bridge=none" \
-        2>&1 | tee /tmp/docker-host.log &
-    DOCKER_PID=$!
-    
-    sleep 5
-    
-    # If still failing, try rootless mode
-    if ! kill -0 $DOCKER_PID 2>/dev/null; then
-        echo "Host network mode failed, trying rootless Docker..."
-        if [ -f /app/scripts/start-docker-rootless.sh ]; then
-            /app/scripts/start-docker-rootless.sh &
-            DOCKER_PID=$!
-        fi
-    fi
-fi
 
 # Wait for Docker to be ready
 echo "Waiting for Docker daemon to be ready..."

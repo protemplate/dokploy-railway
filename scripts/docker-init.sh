@@ -4,11 +4,12 @@
 echo "Initializing Docker environment checks..."
 
 # Check if we have CAP_NET_ADMIN capability
+# In Railway, we typically don't have this capability
 if capsh --print 2>/dev/null | grep -q cap_net_admin; then
-    echo "✓ Network admin capability detected"
+    echo "✓ Network admin capability detected (unexpected in Railway)"
     export USE_IPTABLES="true"
 else
-    echo "✗ No network admin capability - will disable iptables"
+    echo "✓ Running without network admin capability (expected in Railway)"
     export USE_IPTABLES="false"
 fi
 
