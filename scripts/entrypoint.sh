@@ -28,9 +28,6 @@ else
     mkdir -p /var/lib/docker
 fi
 
-# Configure Docker daemon for Railway's container environment
-mkdir -p /etc/docker
-
 # Set Docker data root based on volume availability
 if [ -d "/data" ]; then
     export DOCKER_DATA_ROOT="/data/docker"
@@ -38,40 +35,67 @@ else
     export DOCKER_DATA_ROOT="/var/lib/docker"
 fi
 
-# Initialize Docker with appropriate configuration
+# Initialize Docker environment checks
 if [ -f /app/scripts/docker-init.sh ]; then
-    /app/scripts/docker-init.sh
-else
-    # Fallback configuration
-    cat > /etc/docker/daemon.json <<EOF
-{
-  "storage-driver": "vfs",
-  "data-root": "$DOCKER_DATA_ROOT",
-  "exec-opts": ["native.cgroupdriver=cgroupfs"],
-  "log-driver": "json-file",
-  "log-opts": {
-    "max-size": "10m",
-    "max-file": "3"
-  },
-  "dns": ["8.8.8.8", "8.8.4.4"],
-  "insecure-registries": ["127.0.0.0/8"],
-  "live-restore": false,
-  "userland-proxy": true,
-  "iptables": false,
-  "bridge": "none",
-  "max-concurrent-downloads": 3,
-  "max-concurrent-uploads": 5,
-  "registry-mirrors": [],
-  "debug": false
-}
-EOF
+    source /app/scripts/docker-init.sh
 fi
 
-# Start Docker daemon in the background
-echo "Starting Docker daemon..."
-echo "Note: Some warnings about plugins and propagation are expected in container environment"
-dockerd 2>&1 | tee /tmp/docker.log &
+# Ensure Docker directories exist
+mkdir -p /etc/docker
+mkdir -p "${DOCKER_DATA_ROOT}"
+
+# Start Docker daemon in the background with proper flags for Railway
+echo "Starting Docker daemon for Railway environment..."
+echo "Note: Some warnings are expected in container environment"
+
+# Method 1: Try starting Docker with minimal networking
+echo "Attempting to start Docker with disabled networking features..."
+dockerd \
+    --iptables=false \
+    --ipv6=false \
+    --bridge=none \
+    --ip-forward=false \
+    --ip-masq=false \
+    --data-root="${DOCKER_DATA_ROOT}" \
+    --storage-driver=vfs \
+    --exec-opt="native.cgroupdriver=cgroupfs" \
+    --cgroup-parent="/docker" \
+    --raw-logs \
+    --log-level=warn \
+    2>&1 | tee /tmp/docker.log &
 DOCKER_PID=$!
+
+# Give it a moment to fail or succeed
+sleep 5
+
+# Check if Docker started
+if ! kill -0 $DOCKER_PID 2>/dev/null; then
+    echo "Standard Docker failed, trying with host network only..."
+    
+    # Method 2: Try with host network driver only
+    dockerd \
+        --iptables=false \
+        --ipv6=false \
+        --ip-forward=false \
+        --ip-masq=false \
+        --host=unix:///var/run/docker.sock \
+        --data-root="${DOCKER_DATA_ROOT}" \
+        --storage-driver=vfs \
+        --default-network-opt="bridge=none" \
+        2>&1 | tee /tmp/docker-host.log &
+    DOCKER_PID=$!
+    
+    sleep 5
+    
+    # If still failing, try rootless mode
+    if ! kill -0 $DOCKER_PID 2>/dev/null; then
+        echo "Host network mode failed, trying rootless Docker..."
+        if [ -f /app/scripts/start-docker-rootless.sh ]; then
+            /app/scripts/start-docker-rootless.sh &
+            DOCKER_PID=$!
+        fi
+    fi
+fi
 
 # Wait for Docker to be ready
 echo "Waiting for Docker daemon to be ready..."

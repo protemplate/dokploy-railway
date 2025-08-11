@@ -41,10 +41,14 @@ else
     echo "Docker Swarm already active"
 fi
 
-# Create Dokploy network
+# Create Dokploy network using host network driver for Railway
 echo "Creating Dokploy network..."
-docker network create --driver overlay --attachable dokploy-network 2>/dev/null || {
-    echo "Network dokploy-network already exists"
+# In Railway, we use host networking since bridge is disabled
+docker network create --driver host dokploy-network 2>/dev/null || {
+    # If host network fails, try overlay (for Swarm mode)
+    docker network create --driver overlay --attachable dokploy-network 2>/dev/null || {
+        echo "Network dokploy-network already exists or using default"
+    }
 }
 
 # Ensure required directories exist with proper permissions
