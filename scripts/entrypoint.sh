@@ -44,48 +44,95 @@ fi
 mkdir -p /etc/docker
 mkdir -p "${DOCKER_DATA_ROOT}"
 
-# Start Docker daemon in the background with proper flags for Railway
-echo "Starting Docker daemon for Railway environment..."
-echo "Note: Some warnings are expected in container environment"
-
-# Start Docker with disabled networking features for Railway
-echo "Starting Docker with Railway-optimized configuration..."
-dockerd \
-    --iptables=false \
-    --ipv6=false \
-    --bridge=none \
-    --ip-forward=false \
-    --ip-masq=false \
-    --data-root="${DOCKER_DATA_ROOT}" \
-    --storage-driver=vfs \
-    --exec-opt="native.cgroupdriver=cgroupfs" \
-    --cgroup-parent="/docker" \
-    --raw-logs \
-    2>&1 | tee /tmp/docker.log | grep -v "ip6tables\|iptables\|daemon root propagation\|configuring DOCKER" &
-DOCKER_PID=$!
-
-
-# Wait for Docker to be ready
-echo "Waiting for Docker daemon to be ready..."
-MAX_DOCKER_WAIT=60
-DOCKER_WAITED=0
-while [ $DOCKER_WAITED -lt $MAX_DOCKER_WAIT ]; do
-    if docker info >/dev/null 2>&1; then
-        echo "✓ Docker daemon is ready!"
-        docker version
-        break
+# Check if Docker is already running and functional
+echo "Checking Docker status..."
+if docker info >/dev/null 2>&1; then
+    echo "Docker is already running and functional, skipping startup"
+    DOCKER_PID=$(cat /var/run/docker.pid 2>/dev/null || pgrep dockerd)
+    SKIP_DOCKER_START=true
+else
+    SKIP_DOCKER_START=false
+    
+    # Clean up any existing Docker processes/files from previous runs
+    echo "Docker not functional, cleaning up old processes..."
+    
+    # Kill any existing dockerd processes
+    pkill -f dockerd 2>/dev/null || true
+    
+    # Clean up PID file
+    if [ -f /var/run/docker.pid ]; then
+        OLD_PID=$(cat /var/run/docker.pid)
+        if kill -0 $OLD_PID 2>/dev/null; then
+            echo "Found existing Docker process (PID $OLD_PID), stopping it..."
+            kill -TERM $OLD_PID 2>/dev/null || true
+            sleep 2
+            kill -KILL $OLD_PID 2>/dev/null || true
+        fi
+        rm -f /var/run/docker.pid
     fi
+    
+    # Clean up Docker socket if it exists
+    if [ -S /var/run/docker.sock ]; then
+        echo "Removing existing Docker socket..."
+        rm -f /var/run/docker.sock
+    fi
+    
+    # Clean up any containerd processes
+    pkill -f containerd 2>/dev/null || true
+    
+    # Wait a moment for processes to clean up
     sleep 2
-    DOCKER_WAITED=$((DOCKER_WAITED + 2))
-    echo "  Waiting for Docker... ($DOCKER_WAITED/$MAX_DOCKER_WAIT seconds)"
-done
+fi
 
-if [ $DOCKER_WAITED -ge $MAX_DOCKER_WAIT ]; then
+if [ "$SKIP_DOCKER_START" = "false" ]; then
+    # Start Docker daemon in the background with proper flags for Railway
+    echo "Starting Docker daemon for Railway environment..."
+    echo "Note: Some warnings are expected in container environment"
+    
+    # Start Docker with disabled networking features for Railway
+    echo "Starting Docker with Railway-optimized configuration..."
+    dockerd \
+        --iptables=false \
+        --ipv6=false \
+        --bridge=none \
+        --ip-forward=false \
+        --ip-masq=false \
+        --data-root="${DOCKER_DATA_ROOT}" \
+        --storage-driver=vfs \
+        --exec-opt="native.cgroupdriver=cgroupfs" \
+        --cgroup-parent="/docker" \
+        --raw-logs \
+        2>&1 | tee /tmp/docker.log | grep -v "ip6tables\|iptables\|daemon root propagation\|configuring DOCKER" &
+    DOCKER_PID=$!
+    
+    # Wait for Docker to be ready
+    echo "Waiting for Docker daemon to be ready..."
+    MAX_DOCKER_WAIT=60
+    DOCKER_WAITED=0
+    while [ $DOCKER_WAITED -lt $MAX_DOCKER_WAIT ]; do
+        if docker info >/dev/null 2>&1; then
+            echo "✓ Docker daemon is ready!"
+            docker version
+            break
+        fi
+        sleep 2
+        DOCKER_WAITED=$((DOCKER_WAITED + 2))
+        echo "  Waiting for Docker... ($DOCKER_WAITED/$MAX_DOCKER_WAIT seconds)"
+    done
+else
+    echo "✓ Using existing Docker daemon"
+    docker version
+fi
+
+# Check if Docker is ready (for both new start and existing daemon)
+if ! docker info >/dev/null 2>&1; then
     echo "==============================================="
-    echo "ERROR: Docker daemon failed to start"
+    echo "ERROR: Docker daemon is not functional"
     echo "==============================================="
-    echo "Docker logs (last 50 lines):"
-    tail -n 50 /tmp/docker.log
+    if [ -f /tmp/docker.log ]; then
+        echo "Docker logs (last 50 lines):"
+        tail -n 50 /tmp/docker.log
+    fi
     echo "==============================================="
     echo "System information:"
     uname -a
