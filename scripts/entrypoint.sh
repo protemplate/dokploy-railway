@@ -33,12 +33,17 @@ mkdir -p /etc/docker
 
 # Set Docker data root based on volume availability
 if [ -d "/data" ]; then
-    DOCKER_DATA_ROOT="/data/docker"
+    export DOCKER_DATA_ROOT="/data/docker"
 else
-    DOCKER_DATA_ROOT="/var/lib/docker"
+    export DOCKER_DATA_ROOT="/var/lib/docker"
 fi
 
-cat > /etc/docker/daemon.json <<EOF
+# Initialize Docker with appropriate configuration
+if [ -f /app/scripts/docker-init.sh ]; then
+    /app/scripts/docker-init.sh
+else
+    # Fallback configuration
+    cat > /etc/docker/daemon.json <<EOF
 {
   "storage-driver": "vfs",
   "data-root": "$DOCKER_DATA_ROOT",
@@ -48,21 +53,23 @@ cat > /etc/docker/daemon.json <<EOF
     "max-size": "10m",
     "max-file": "3"
   },
-  "dns": ["8.8.8.8", "8.8.4.4", "2001:4860:4860::8888", "2001:4860:4860::8844"],
-  "ipv6": true,
-  "fixed-cidr-v6": "2001:db8:1::/64",
+  "dns": ["8.8.8.8", "8.8.4.4"],
   "insecure-registries": ["127.0.0.0/8"],
   "live-restore": false,
-  "userland-proxy": false,
+  "userland-proxy": true,
+  "iptables": false,
+  "bridge": "none",
   "max-concurrent-downloads": 3,
   "max-concurrent-uploads": 5,
   "registry-mirrors": [],
   "debug": false
 }
 EOF
+fi
 
-# Start Docker daemon in the background (config file handles all settings)
+# Start Docker daemon in the background
 echo "Starting Docker daemon..."
+echo "Note: Some warnings about plugins and propagation are expected in container environment"
 dockerd 2>&1 | tee /tmp/docker.log &
 DOCKER_PID=$!
 

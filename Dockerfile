@@ -7,6 +7,8 @@ ENV DOKPLOY_PORT=3000
 ENV ADVERTISE_ADDR=[::]
 ENV DOCKER_HOST=unix:///var/run/docker.sock
 ENV RAILWAY_RUN_UID=0
+ENV DOCKER_BUILDKIT=0
+ENV DOCKER_DRIVER=vfs
 
 # Install required packages
 RUN apt-get update && apt-get install -y \
@@ -22,6 +24,7 @@ RUN apt-get update && apt-get install -y \
     dnsutils \
     iptables \
     kmod \
+    libcap2-bin \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Docker
