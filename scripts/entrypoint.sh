@@ -175,18 +175,26 @@ if [ ! -f /data/dokploy/.installed ]; then
     
     # Set advertise address for Railway
     if [ -n "$RAILWAY_PRIVATE_DOMAIN" ]; then
-        # Running on Railway - use the private domain
-        export ADVERTISE_ADDR="[::]"
         echo "Running on Railway with private domain: $RAILWAY_PRIVATE_DOMAIN"
+        # Get the actual IP address for Swarm initialization
+        CONTAINER_IP=$(hostname -I | awk '{print $1}')
+        if [ -z "$CONTAINER_IP" ]; then
+            CONTAINER_IP=$(ip -4 addr show | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | grep -v '127.0.0.1' | head -n1)
+        fi
+        if [ -z "$CONTAINER_IP" ]; then
+            CONTAINER_IP=$(ip route get 1 2>/dev/null | grep -oP 'src \K\S+')
+        fi
+        if [ -z "$CONTAINER_IP" ]; then
+            CONTAINER_IP="127.0.0.1"
+        fi
+        export ADVERTISE_ADDR=$CONTAINER_IP
     elif [ -n "$ADVERTISE_ADDR" ]; then
         export ADVERTISE_ADDR=$ADVERTISE_ADDR
     else
-        # Try to get the container's IP (prefer IPv6)
-        IPV6_ADDR=$(ip -6 addr show | grep 'inet6' | grep -v 'fe80' | awk '{print $2}' | cut -d'/' -f1 | head -n1)
-        if [ -n "$IPV6_ADDR" ]; then
-            export ADVERTISE_ADDR="[$IPV6_ADDR]"
-        else
-            export ADVERTISE_ADDR=$(hostname -I | awk '{print $1}')
+        # Try to get the container's IP
+        export ADVERTISE_ADDR=$(hostname -I | awk '{print $1}')
+        if [ -z "$ADVERTISE_ADDR" ]; then
+            export ADVERTISE_ADDR="127.0.0.1"
         fi
     fi
     

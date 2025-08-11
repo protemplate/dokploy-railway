@@ -15,15 +15,27 @@ fi
 echo "Setting up Dokploy for Railway environment..."
 
 # Determine advertise address for Docker Swarm
-if [ -n "$RAILWAY_PRIVATE_DOMAIN" ]; then
-    # Running on Railway - use IPv6
-    ADVERTISE_ADDR="[::]"
-    echo "Railway environment detected - using IPv6 advertise address"
-elif [ -n "$ADVERTISE_ADDR" ]; then
-    ADVERTISE_ADDR=$ADVERTISE_ADDR
+echo "Determining advertise address for Docker Swarm..."
+
+# Use helper script if available
+if [ -f /app/scripts/get-container-ip.sh ]; then
+    ADVERTISE_ADDR=$(/app/scripts/get-container-ip.sh | tail -n1)
 else
-    # Fallback to container IP
-    ADVERTISE_ADDR=$(hostname -I | awk '{print $1}')
+    # Fallback to simple detection
+    ADVERTISE_ADDR=$(hostname -I 2>/dev/null | awk '{print $1}')
+    if [ -z "$ADVERTISE_ADDR" ]; then
+        ADVERTISE_ADDR="127.0.0.1"
+    fi
+fi
+
+# Validate the IP address
+if [ "$ADVERTISE_ADDR" = "127.0.0.1" ]; then
+    echo "WARNING: Using localhost as advertise address. Swarm may have limited functionality."
+elif echo "$ADVERTISE_ADDR" | grep -qE '^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$'; then
+    echo "Using IPv4 address: $ADVERTISE_ADDR"
+else
+    echo "WARNING: Invalid IP address detected: $ADVERTISE_ADDR"
+    ADVERTISE_ADDR="127.0.0.1"
 fi
 
 echo "Advertise address: $ADVERTISE_ADDR"
