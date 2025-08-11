@@ -1,8 +1,19 @@
 #!/bin/bash
 set -e
 
+# Setup logging
+LOG_FILE="/tmp/dokploy-startup.log"
+exec 1> >(tee -a "$LOG_FILE")
+exec 2>&1
+
+echo "==============================================="
+echo "Dokploy Railway Container Starting"
+echo "Date: $(date)"
+echo "==============================================="
+
 # Configure Railway-specific settings if needed
 if [ -f /app/scripts/configure-railway.sh ]; then
+    echo "Configuring Railway-specific settings..."
     /app/scripts/configure-railway.sh
 fi
 
@@ -10,8 +21,10 @@ echo "Starting Docker daemon with IPv6 support..."
 
 # Ensure docker data directory exists
 if [ -d "/data" ]; then
+    echo "Persistent volume detected at /data"
     mkdir -p /data/docker
 else
+    echo "WARNING: No persistent volume at /data - data will not persist!"
     mkdir -p /var/lib/docker
 fi
 
@@ -35,10 +48,16 @@ cat > /etc/docker/daemon.json <<EOF
     "max-size": "10m",
     "max-file": "3"
   },
-  "dns": ["8.8.8.8", "8.8.4.4"],
+  "dns": ["8.8.8.8", "8.8.4.4", "2001:4860:4860::8888", "2001:4860:4860::8844"],
+  "ipv6": true,
+  "fixed-cidr-v6": "2001:db8:1::/64",
   "insecure-registries": ["127.0.0.0/8"],
   "live-restore": false,
-  "userland-proxy": false
+  "userland-proxy": false,
+  "max-concurrent-downloads": 3,
+  "max-concurrent-uploads": 5,
+  "registry-mirrors": [],
+  "debug": false
 }
 EOF
 
@@ -53,18 +72,28 @@ MAX_DOCKER_WAIT=60
 DOCKER_WAITED=0
 while [ $DOCKER_WAITED -lt $MAX_DOCKER_WAIT ]; do
     if docker info >/dev/null 2>&1; then
-        echo "Docker daemon is ready!"
+        echo "✓ Docker daemon is ready!"
+        docker version
         break
     fi
     sleep 2
     DOCKER_WAITED=$((DOCKER_WAITED + 2))
-    echo "Waiting for Docker... ($DOCKER_WAITED seconds)"
+    echo "  Waiting for Docker... ($DOCKER_WAITED/$MAX_DOCKER_WAIT seconds)"
 done
 
 if [ $DOCKER_WAITED -ge $MAX_DOCKER_WAIT ]; then
-    echo "ERROR: Docker daemon failed to start within $MAX_DOCKER_WAIT seconds"
-    echo "Docker logs:"
-    cat /tmp/docker.log
+    echo "==============================================="
+    echo "ERROR: Docker daemon failed to start"
+    echo "==============================================="
+    echo "Docker logs (last 50 lines):"
+    tail -n 50 /tmp/docker.log
+    echo "==============================================="
+    echo "System information:"
+    uname -a
+    echo "Memory:"
+    free -h
+    echo "Disk:"
+    df -h
     exit 1
 fi
 
@@ -117,15 +146,27 @@ if [ ! -f /data/dokploy/.installed ]; then
     
     echo "Using advertise address: $ADVERTISE_ADDR"
     
-    # Install Dokploy
-    /app/scripts/install-dokploy.sh
-    
-    # Mark as installed
-    mkdir -p /data/dokploy
-    touch /data/dokploy/.installed
-    rm -f /tmp/dokploy-installing
-    
-    echo "Dokploy installation completed!"
+    # Install Dokploy with error handling
+    echo "Running Dokploy installation script..."
+    if /app/scripts/install-dokploy.sh; then
+        echo "✓ Dokploy installation script completed successfully"
+        
+        # Mark as installed
+        mkdir -p /data/dokploy
+        touch /data/dokploy/.installed
+        rm -f /tmp/dokploy-installing
+        
+        echo "==============================================="
+        echo "✓ Dokploy installation completed!"
+        echo "==============================================="
+    else
+        echo "==============================================="
+        echo "ERROR: Dokploy installation failed!"
+        echo "==============================================="
+        echo "Check logs above for details"
+        rm -f /tmp/dokploy-installing
+        exit 1
+    fi
 else
     echo "Dokploy already installed, starting services..."
     
@@ -168,11 +209,29 @@ if [ $WAITED -ge $MAX_WAIT ]; then
 fi
 
 # Display access information
+echo "==============================================="
+echo "Dokploy Setup Complete!"
+echo "==============================================="
 if [ -n "$RAILWAY_PUBLIC_DOMAIN" ]; then
-    echo "Dokploy is accessible at: https://$RAILWAY_PUBLIC_DOMAIN"
-else
-    echo "Dokploy is running on port ${PORT:-3000}"
+    echo "✓ Public URL: https://$RAILWAY_PUBLIC_DOMAIN"
 fi
+if [ -n "$RAILWAY_PRIVATE_DOMAIN" ]; then
+    echo "✓ Private URL: http://$RAILWAY_PRIVATE_DOMAIN:${PORT:-3000}"
+fi
+echo "✓ Local access: http://localhost:${PORT:-3000}"
+echo "==============================================="
 
-# Keep the container running
-wait $DOCKER_PID
+# Monitor Docker daemon
+echo "Container is now running. Monitoring Docker daemon..."
+trap "echo 'Shutting down...'; docker swarm leave --force 2>/dev/null; kill $DOCKER_PID 2>/dev/null" EXIT
+
+# Keep the container running and monitor Docker
+while true; do
+    if ! kill -0 $DOCKER_PID 2>/dev/null; then
+        echo "ERROR: Docker daemon has stopped unexpectedly!"
+        echo "Docker logs (last 50 lines):"
+        tail -n 50 /tmp/docker.log
+        exit 1
+    fi
+    sleep 30
+done
